@@ -97,13 +97,40 @@ int Draw(Context *context, SDL_GPUGraphicsPipeline* FillPipeline){
 	return 0;
 }
 
-int DrawWithVertexBuffer(Context *context, SDL_GPUGraphicsPipeline *FillPipeline){
+int DrawWithVertexBuffer(Context *context, SDL_GPUGraphicsPipeline *FillPipeline, SDL_GPUBuffer* VertexBuffer){
 
     SDL_GPUCommandBuffer* cmdBuffer = SDL_AcquireGPUCommandBuffer(context->gpuDevice);
 
-    SDL_GPUTexture* swapBuffer;
+    SDL_GPUTexture* swapchainTexture; 
 
-    SDL_WaitAndAcquireGPUSwapchainTexture(cmdBuffer, context->window, &swapBuffer,  NULL, NULL);
+    bool swapchainTextureReceived = SDL_WaitAndAcquireGPUSwapchainTexture(cmdBuffer, context->window, &swapchainTexture, 0, 0);
+
+    assert(swapchainTexture);
+
+    if(swapchainTexture != NULL) {
+
+		SDL_GPUColorTargetInfo colorTargetInfo = { 0 };
+		colorTargetInfo.texture = swapchainTexture;
+		colorTargetInfo.clear_color = (SDL_FColor){ 0.0f, 0.0f, 0.0f, 1.0f };
+		colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
+		colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
+
+        SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(cmdBuffer, &colorTargetInfo, 1, NULL); 
+
+
+        SDL_BindGPUGraphicsPipeline(renderPass, FillPipeline); 
+
+
+        SDL_GPUBufferBinding bufferBinding = (SDL_GPUBufferBinding){ .buffer = VertexBuffer, .offset = 0 };
+        SDL_BindGPUVertexBuffers(renderPass, 0, &bufferBinding, 1);
+        SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
+
+        SDL_EndGPURenderPass(renderPass);
+
+    }
+
+    SDL_SubmitGPUCommandBuffer(cmdBuffer);
+
     return 0;
 }
 

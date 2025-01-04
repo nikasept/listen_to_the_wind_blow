@@ -50,7 +50,11 @@ Task 5: Learn how to input vertices to the shader [X]
 Task 6: Make a Fragment Shader [X]
 Task 7: Draw a first triangle [X]
 
-Task7: What is a swapchain? [~]
+Task ?: What is a swapchain? [~]
+
+Task 8: Draw a triangle with vertex buffer binding (through transfer buffer) [X]
+Task ?: Give project a better structure [~]
+Task ?: Research on how to efficiently transfer data between cpu and gpu (transfer buffer principles) [~]
 
 Unforseen Tasks:
 (1) Installed vulkan-radeon (mesa project) 
@@ -60,6 +64,8 @@ Unforseen Tasks:
 
 
 static SDL_GPUGraphicsPipeline* FillPipeline;
+static SDL_GPUBuffer* VertexBuffer;
+
 static void init(Context* context) {
     
     bool deviceCreation = SDL_ClaimWindowForGPUDevice(context->gpuDevice, context->window);
@@ -90,7 +96,107 @@ static void init(Context* context) {
 
 }
 
+static void initWithVertexBuffer(Context* context){
+    bool deviceCreated = SDL_ClaimWindowForGPUDevice(context->gpuDevice, context->window);
+
+    assert(deviceCreated);
+
+    SDL_GPUShader* vertexShader = LoadShader(context->gpuDevice, "triangle.vert.spv");
+    SDL_GPUShader* fragmentShader = LoadShader(context->gpuDevice, "triangle.frag.spv");
+
+    SDL_GPUGraphicsPipelineCreateInfo info = {
+        .vertex_shader = vertexShader,
+        .fragment_shader = fragmentShader, 
+        .vertex_input_state = (SDL_GPUVertexInputState){
+            .vertex_buffer_descriptions = (SDL_GPUVertexBufferDescription[]){{
+                .slot = 0,
+                .pitch = sizeof(PositionColorVertex),
+                .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+                .instance_step_rate = 0
+            }},
+            .num_vertex_buffers = 1,
+           
+            .vertex_attributes = (SDL_GPUVertexAttribute[]){
+                {
+                    .location = 0,
+                    .buffer_slot = 0,
+                    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+                    .offset = 0,
+                },
+                {
+                    .location = 1,
+                    .buffer_slot = 0,
+                    .format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,
+                    .offset = sizeof(float) * 3
+                }
+            },
+
+            .num_vertex_attributes = 2
+        },
+        .target_info = {
+            .color_target_descriptions = (SDL_GPUColorTargetDescription[]) {
+            { 
+                    .format = SDL_GetGPUSwapchainTextureFormat(context->gpuDevice, context->window)
+                }
+            },
+            .num_color_targets = 1,
+        },
+    };
+
+    info.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+
+    FillPipeline = SDL_CreateGPUGraphicsPipeline(context->gpuDevice, &info); 
+    assert(FillPipeline != NULL);
+
+
+    SDL_GPUBufferCreateInfo vertexBufferCreateInfo  = {
+        .size = sizeof(PositionColorVertex) * 3,
+        .usage = SDL_GPU_BUFFERUSAGE_VERTEX
+      };
+
+    VertexBuffer = SDL_CreateGPUBuffer(
+        context->gpuDevice,
+        &vertexBufferCreateInfo
+    ); 
+
+    SDL_GPUTransferBufferCreateInfo transferBufferCreateInfo = {
+        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = sizeof(PositionColorVertex) * 3
+    };
+
+    SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(
+        context->gpuDevice,
+        &transferBufferCreateInfo);
+
+    PositionColorVertex* transferData = (PositionColorVertex*)SDL_MapGPUTransferBuffer(context->gpuDevice, transferBuffer, false); 
+
+    transferData[0] = (PositionColorVertex) {    -1,    -1, 0, 255,   0,   0, 255 };
+	transferData[1] = (PositionColorVertex) {     1,    -1, 0,   0, 255,   0, 255 };
+	transferData[2] = (PositionColorVertex) {     0,     1, 0,   0,   0, 255, 255 };
+
+
+    // Lacuna: We don't understand Mapping
+    SDL_UnmapGPUTransferBuffer(context->gpuDevice, transferBuffer);
+
+    SDL_GPUCommandBuffer* uploadCommandBuffer = SDL_AcquireGPUCommandBuffer(context->gpuDevice);
+    SDL_GPUCopyPass* pass = SDL_BeginGPUCopyPass(uploadCommandBuffer);
+
+    SDL_GPUTransferBufferLocation source = SDL_GPUTransferBufferLocation{.transfer_buffer = transferBuffer, .offset = 0 };
+    SDL_GPUBufferRegion destination = SDL_GPUBufferRegion{.offset = 0, .size = sizeof(PositionColorVertex) * 3, .buffer = VertexBuffer}; 
+
+    // Why did we map if we were going to specify information about source and destination again?
+    SDL_UploadToGPUBuffer(pass, &source, &destination, false);
+
+
+
+    SDL_EndGPUCopyPass(pass);
+    SDL_SubmitGPUCommandBuffer(uploadCommandBuffer);
+    SDL_ReleaseGPUTransferBuffer(context->gpuDevice, transferBuffer);
+
+}
+
 static void destroy(Context* context) {
+    SDL_ReleaseGPUBuffer(context->gpuDevice, VertexBuffer);
     SDL_ReleaseGPUGraphicsPipeline(context->gpuDevice, FillPipeline);
     SDL_ReleaseWindowFromGPUDevice(context->gpuDevice,  context->window);
     SDL_DestroyWindow(context->window);
@@ -107,8 +213,8 @@ int main() {
         .gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, NULL)
         };
 
-    init(&context);
-    Draw(&context, FillPipeline);
+    initWithVertexBuffer(&context);
+    DrawWithVertexBuffer(&context, FillPipeline, VertexBuffer);
 
     SDL_Event e;
     bool quit = false;

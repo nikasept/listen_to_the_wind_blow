@@ -10,4 +10,10 @@ public:
     SDL_GPUDevice* gpuDevice;
 };
 
+class PositionColorVertex {
+public:
+    float x, y, z;
+    Uint8 r, g, b, a;
+};
+
 #endif

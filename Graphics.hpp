@@ -20,4 +20,4 @@ SDL_GPUShader* LoadShader(
 int Draw(Context* context, SDL_GPUGraphicsPipeline* FillPipeline);
 
 
-int DrawWithVertexBuffer(Context* context, SDL_GPUGraphicsPipeline* FillPipeline);
+int DrawWithVertexBuffer(Context* context, SDL_GPUGraphicsPipeline* FillPipeline, SDL_GPUBuffer* VertexBuffer);
