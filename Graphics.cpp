@@ -1,13 +1,14 @@
-#include <SDL3/SDL_filesystem.h>
-#include <SDL3/SDL_gpu.h>
-#include <SDL3/SDL_init.h>
-#include <SDL3/SDL_iostream.h>
-#include <SDL3/SDL_log.h>
-#include <SDL3/SDL_stdinc.h>
-#include <SDL3/SDL_video.h>
+
+#include <SDL3/SDL.h>
 #include <cassert>
+#include <cstring>
 #include <iostream>
+
+#include "Graphics.hpp"
 #include "Common.hpp"
+
+bool isDrawing = false;
+RenderPassInfo* renderPassInfo;
 
 SDL_GPUShader* LoadShader(
     SDL_GPUDevice* gpuDevice,
@@ -29,7 +30,8 @@ SDL_GPUShader* LoadShader(
     if(backendFormat & SDL_GPU_SHADERFORMAT_SPIRV) {
         // !This might cause erros to if something goes wrong test this!
         const char* BasePath = SDL_GetBasePath(); 
-        SDL_snprintf(fullPath, sizeof(fullPath), "%s/shaders/compiled/%s", BasePath, shaderName);
+        SDL_snprintf(fullPath, sizeof(fullPath),
+		     "%s/shaders/compiled/%s", BasePath, shaderName);
         format = backendFormat;
     } else {
         std::cerr << "Unrecognizable gpu shader format" << std::endl;
@@ -64,8 +66,9 @@ SDL_GPUShader* LoadShader(
 
 }
 
-
-int Draw(Context *context, SDL_GPUGraphicsPipeline* FillPipeline){
+// depricated, only use of one pipline did this.
+// one pipeline thus one shader.
+int DrawShader(Context *context, SDL_GPUGraphicsPipeline* FillPipeline){
     SDL_GPUCommandBuffer* cmdBuffer = SDL_AcquireGPUCommandBuffer(context->gpuDevice);
 
     assert(cmdBuffer != NULL);
@@ -77,59 +80,110 @@ int Draw(Context *context, SDL_GPUGraphicsPipeline* FillPipeline){
         return -1;
     }
 
-	if (swapchainTexture != NULL)
-	{
-		SDL_GPUColorTargetInfo colorTargetInfo = { 0 };
-		colorTargetInfo.texture = swapchainTexture;
-		colorTargetInfo.clear_color = (SDL_FColor){ 0.0f, 0.0f, 0.0f, 1.0f };
-		colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
-		colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
+    if (swapchainTexture != NULL) {
+      return -1;
+    }
+    SDL_GPUColorTargetInfo colorTargetInfo = { 0 };
+    colorTargetInfo.texture = swapchainTexture;
+    colorTargetInfo.clear_color =
+      (SDL_FColor){ 0.0f, 0.0f, 0.0f, 1.0f };
+    colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
+    colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
 
-		SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(cmdBuffer, &colorTargetInfo, 1, NULL);
-		SDL_BindGPUGraphicsPipeline(renderPass, FillPipeline);
+    SDL_GPURenderPass* renderPass =
+      SDL_BeginGPURenderPass(cmdBuffer, &colorTargetInfo,
+			     1, NULL);
+
+    SDL_BindGPUGraphicsPipeline(renderPass, FillPipeline);
 		
-		SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
-		SDL_EndGPURenderPass(renderPass);
-	}
+    SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
+    SDL_EndGPURenderPass(renderPass);
 
-	SDL_SubmitGPUCommandBuffer(cmdBuffer);
+    SDL_SubmitGPUCommandBuffer(cmdBuffer);
 
-	return 0;
+    return 0;
 }
 
-int DrawWithVertexBuffer(Context *context, SDL_GPUGraphicsPipeline *FillPipeline, SDL_GPUBuffer* VertexBuffer){
+bool BeginDrawing(Context *context, SDL_FColor clearColor) {
+    isDrawing = true;
 
-    SDL_GPUCommandBuffer* cmdBuffer = SDL_AcquireGPUCommandBuffer(context->gpuDevice);
+    SDL_GPUCommandBuffer* cmdBuffer =
+       SDL_AcquireGPUCommandBuffer(context->gpuDevice);
 
     SDL_GPUTexture* swapchainTexture; 
 
-    bool swapchainTextureReceived = SDL_WaitAndAcquireGPUSwapchainTexture(cmdBuffer, context->window, &swapchainTexture, 0, 0);
+    bool swapchainTextureReceived =
+      SDL_WaitAndAcquireGPUSwapchainTexture(cmdBuffer, context->window,
+					    &swapchainTexture, 0, 0);
 
-    assert(swapchainTexture);
+    assert(swapchainTextureReceived);
 
-    if(swapchainTexture != NULL) {
+    SDL_GPUColorTargetInfo colorTargetInfo = { 0 };
+    colorTargetInfo.texture = swapchainTexture;
+    colorTargetInfo.clear_color = clearColor;
+    colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
+    colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
+    // allocate to memory;
+    SDL_GPUColorTargetInfo* pColorTargetInfo = new SDL_GPUColorTargetInfo;
+    std::memcpy(pColorTargetInfo, &colorTargetInfo,
+		sizeof(SDL_GPUColorTargetInfo));
 
-		SDL_GPUColorTargetInfo colorTargetInfo = { 0 };
-		colorTargetInfo.texture = swapchainTexture;
-		colorTargetInfo.clear_color = (SDL_FColor){ 0.0f, 0.0f, 0.0f, 1.0f };
-		colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
-		colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
+    SDL_GPURenderPass* renderPass =
+      SDL_BeginGPURenderPass(cmdBuffer, &colorTargetInfo, 1, NULL); 
 
-        SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(cmdBuffer, &colorTargetInfo, 1, NULL); 
+    renderPassInfo = new RenderPassInfo {
+      cmdBuffer,
+      swapchainTexture,
+      pColorTargetInfo,
+      renderPass
+    };
 
+    return true;
+}
 
-        SDL_BindGPUGraphicsPipeline(renderPass, FillPipeline); 
+void testRenderPassInfo() {
+    assert(renderPassInfo->cmdBuffer);
+    assert(renderPassInfo->swapchainTexture);
+    assert(renderPassInfo->renderPass);
+}
 
+bool PresentAndStopDrawing() {
+    assert(renderPassInfo->cmdBuffer);
+    assert(renderPassInfo->swapchainTexture);
+    assert(renderPassInfo->renderPass);
+    assert(renderPassInfo->colorTargetInfo);
 
-        SDL_GPUBufferBinding bufferBinding = (SDL_GPUBufferBinding){ .buffer = VertexBuffer, .offset = 0 };
-        SDL_BindGPUVertexBuffers(renderPass, 0, &bufferBinding, 1);
-        SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
+    // no need to free the swapchaintexture.
+    SDL_EndGPURenderPass(renderPassInfo->renderPass);
+    SDL_SubmitGPUCommandBuffer(renderPassInfo->cmdBuffer);
 
-        SDL_EndGPURenderPass(renderPass);
+    //free, use deconstructor for this??
+    SDL_free(renderPassInfo->colorTargetInfo);
+    delete renderPassInfo;
+    return true;
+}
 
+int DrawWithVertexBuffer(Context *context,
+			 SDL_GPUGraphicsPipeline *FillPipeline,
+			 SDL_GPUBuffer* VertexBuffer){
+
+    testRenderPassInfo();
+
+    if(renderPassInfo->swapchainTexture == NULL) {
+        std::cout << "no swapchain texture" << std::endl;
+	return -1;
     }
+    SDL_GPURenderPass* renderPass = renderPassInfo->renderPass;
 
-    SDL_SubmitGPUCommandBuffer(cmdBuffer);
+    SDL_BindGPUGraphicsPipeline(renderPass,
+				FillPipeline); 
+
+    SDL_GPUBufferBinding bufferBinding =
+      (SDL_GPUBufferBinding){ .buffer = VertexBuffer, .offset = 0 };
+
+    SDL_BindGPUVertexBuffers(renderPass,
+			     0, &bufferBinding, 1);
+    SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
 
     return 0;
 }

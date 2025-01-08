@@ -4,12 +4,13 @@
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_iostream.h>
 #include <SDL3/SDL_log.h>
-#include <SDL3/SDL_oldnames.h>
 #include <SDL3/SDL_scancode.h>
 #include <SDL3/SDL_stdinc.h>
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_video.h>
+#include <vector>
 #include <cassert>
+#include <iostream>
 #include "Graphics.hpp"
 
 
@@ -64,7 +65,8 @@ Unforseen Tasks:
 
 
 static SDL_GPUGraphicsPipeline* FillPipeline;
-static SDL_GPUBuffer* VertexBuffer;
+//static SDL_GPUBuffer* VertexBuffer;
+static std::vector<SDL_GPUBuffer*> GPUVertexBufferPointers;
 
 static void init(Context* context) {
     
@@ -149,12 +151,17 @@ static void initWithVertexBuffer(Context* context){
     assert(FillPipeline != NULL);
 
 
+}
+
+SDL_GPUBuffer* CreateGPUTriangeVertexBuffer(Context* context, PositionColorVertex vertex[3]) {
     SDL_GPUBufferCreateInfo vertexBufferCreateInfo  = {
         .size = sizeof(PositionColorVertex) * 3,
         .usage = SDL_GPU_BUFFERUSAGE_VERTEX
-      };
+    };
+    
+    SDL_GPUBuffer* vertexBuffer;
 
-    VertexBuffer = SDL_CreateGPUBuffer(
+    vertexBuffer = SDL_CreateGPUBuffer(
         context->gpuDevice,
         &vertexBufferCreateInfo
     ); 
@@ -170,9 +177,10 @@ static void initWithVertexBuffer(Context* context){
 
     PositionColorVertex* transferData = (PositionColorVertex*)SDL_MapGPUTransferBuffer(context->gpuDevice, transferBuffer, false); 
 
-    transferData[0] = (PositionColorVertex) {    -1,    -1, 0, 255,   0,   0, 255 };
-	transferData[1] = (PositionColorVertex) {     1,    -1, 0,   0, 255,   0, 255 };
-	transferData[2] = (PositionColorVertex) {     0,     1, 0,   0,   0, 255, 255 };
+    //transferData[0] = (PositionColorVertex) {    -1,    -1, 0, 255,   0,   0, 255 };
+    transferData[0] = vertex[0];
+    transferData[1] = vertex[1];
+    transferData[2] = vertex[2];
 
 
     // Lacuna: We don't understand Mapping
@@ -182,7 +190,7 @@ static void initWithVertexBuffer(Context* context){
     SDL_GPUCopyPass* pass = SDL_BeginGPUCopyPass(uploadCommandBuffer);
 
     SDL_GPUTransferBufferLocation source = SDL_GPUTransferBufferLocation{.transfer_buffer = transferBuffer, .offset = 0 };
-    SDL_GPUBufferRegion destination = SDL_GPUBufferRegion{.offset = 0, .size = sizeof(PositionColorVertex) * 3, .buffer = VertexBuffer}; 
+    SDL_GPUBufferRegion destination = SDL_GPUBufferRegion{.offset = 0, .size = sizeof(PositionColorVertex) * 3, .buffer = vertexBuffer}; 
 
     // Why did we map if we were going to specify information about source and destination again?
     SDL_UploadToGPUBuffer(pass, &source, &destination, false);
@@ -193,10 +201,14 @@ static void initWithVertexBuffer(Context* context){
     SDL_SubmitGPUCommandBuffer(uploadCommandBuffer);
     SDL_ReleaseGPUTransferBuffer(context->gpuDevice, transferBuffer);
 
+    return vertexBuffer;
 }
 
+
 static void destroy(Context* context) {
-    SDL_ReleaseGPUBuffer(context->gpuDevice, VertexBuffer);
+    for (SDL_GPUBuffer* buf : GPUVertexBufferPointers) {
+        SDL_ReleaseGPUBuffer(context->gpuDevice, buf);
+    }
     SDL_ReleaseGPUGraphicsPipeline(context->gpuDevice, FillPipeline);
     SDL_ReleaseWindowFromGPUDevice(context->gpuDevice,  context->window);
     SDL_DestroyWindow(context->window);
@@ -214,8 +226,44 @@ int main() {
         };
 
     initWithVertexBuffer(&context);
-    DrawWithVertexBuffer(&context, FillPipeline, VertexBuffer);
 
+    // hard coded vertecies
+    PositionColorVertex vertset1[3] = {
+      {
+        -1,    -1,  0,
+	0,   0,   0, 255 
+      },
+      {
+        -1,    1,  0,
+	0,   255,   0, 255 
+      },
+      {
+        1,    -1,  0,
+	255,  0,   0, 255 
+      }
+    };
+    PositionColorVertex vertset2[3] = {
+      {
+        1,    1,  0,
+	255,  255,   0, 255       },
+      {
+        -1,    1,  0,
+	0,   255,   0, 255 
+      },
+      {
+        1,    -1,  0,
+	255,  0,   0, 255 
+      }
+    };
+    
+    SDL_GPUBuffer* buf1 = CreateGPUTriangeVertexBuffer(&context, vertset1);
+    SDL_GPUBuffer* buf2 = CreateGPUTriangeVertexBuffer(&context, vertset2);
+
+
+    GPUVertexBufferPointers.push_back(buf1);
+    GPUVertexBufferPointers.push_back(buf2);
+
+    
     SDL_Event e;
     bool quit = false;
     while(!quit){
@@ -225,7 +273,14 @@ int main() {
                 quit = true;
             }
         }
-        SDL_Delay(1000/60);
+
+	BeginDrawing(&context, {1.0f, 1.0f, 1.0f, 1.0f} );
+	for (SDL_GPUBuffer* buf : GPUVertexBufferPointers) {
+	    DrawWithVertexBuffer(&context, FillPipeline, buf);
+	}
+	PresentAndStopDrawing();
+
+	SDL_Delay(1000/60);
     }
 
 
