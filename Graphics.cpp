@@ -188,3 +188,134 @@ int DrawWithVertexBuffer(Context *context,
     return 0;
 }
 
+
+SDL_GPUBuffer* CreateGPUTriangeVertexBuffer(Context* context,
+					    PositionColorVertex vertex[3]) {
+    SDL_GPUBufferCreateInfo vertexBufferCreateInfo  = {
+        .size = sizeof(PositionColorVertex) * 3,
+        .usage = SDL_GPU_BUFFERUSAGE_VERTEX
+    };
+    
+    SDL_GPUBuffer* vertexBuffer;
+
+    vertexBuffer = SDL_CreateGPUBuffer(
+        context->gpuDevice,
+        &vertexBufferCreateInfo
+    ); 
+
+    SDL_GPUTransferBufferCreateInfo transferBufferCreateInfo = {
+        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = sizeof(PositionColorVertex) * 3
+    };
+
+    SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(
+        context->gpuDevice,
+        &transferBufferCreateInfo);
+
+    PositionColorVertex* transferData = (PositionColorVertex*)SDL_MapGPUTransferBuffer(context->gpuDevice, transferBuffer, false); 
+
+    //transferData[0] = (PositionColorVertex) {    -1,    -1, 0, 255,   0,   0, 255 };
+    transferData[0] = vertex[0];
+    transferData[1] = vertex[1];
+    transferData[2] = vertex[2];
+
+
+    // Lacuna: We don't understand Mapping
+    SDL_UnmapGPUTransferBuffer(context->gpuDevice, transferBuffer);
+
+    SDL_GPUCommandBuffer* uploadCommandBuffer =
+      SDL_AcquireGPUCommandBuffer(context->gpuDevice);
+
+    SDL_GPUCopyPass* pass = SDL_BeginGPUCopyPass(uploadCommandBuffer);
+
+    SDL_GPUTransferBufferLocation source =
+      SDL_GPUTransferBufferLocation{.transfer_buffer = transferBuffer, .offset = 0 };
+    SDL_GPUBufferRegion destination =
+      SDL_GPUBufferRegion{
+      .offset = 0,
+      .size = sizeof(PositionColorVertex) * 3,
+      .buffer = vertexBuffer
+    }; 
+
+    // Why did we map if we were going to specify information about source and destination again?
+    SDL_UploadToGPUBuffer(pass, &source, &destination, false);
+
+
+
+    SDL_EndGPUCopyPass(pass);
+    SDL_SubmitGPUCommandBuffer(uploadCommandBuffer);
+    SDL_ReleaseGPUTransferBuffer(context->gpuDevice, transferBuffer);
+
+    return vertexBuffer;
+}
+
+SDL_GPUBuffer* CreateGPUQuadVertexBuffer(Context* context,
+					    PositionColorVertex vertex[4]) {
+    SDL_GPUBufferCreateInfo vertexBufferCreateInfo  = {
+        .size = sizeof(PositionColorVertex) * 4,
+        .usage = SDL_GPU_BUFFERUSAGE_VERTEX
+    };
+    
+    SDL_GPUBuffer* vertexBuffer;
+
+    vertexBuffer = SDL_CreateGPUBuffer(
+        context->gpuDevice,
+        &vertexBufferCreateInfo
+    ); 
+
+    SDL_GPUTransferBufferCreateInfo transferBufferCreateInfo = {
+        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = sizeof(PositionColorVertex) * 4 + (sizeof(Uint16) * 6)
+    };
+
+    SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(
+        context->gpuDevice,
+        &transferBufferCreateInfo);
+
+    PositionColorVertex* transferData =
+      (PositionColorVertex*)SDL_MapGPUTransferBuffer(context->gpuDevice,
+						     transferBuffer, false);
+
+    //transferData[0] = (PositionColorVertex) {    -1,    -1, 0, 255,   0,   0, 255 };
+    transferData[0] = vertex[0];
+    transferData[1] = vertex[1];
+    transferData[2] = vertex[2];
+    transferData[3] = vertex[3];
+
+    // tell em how to connect, idk how this work.
+    Uint16* indexData = (Uint16*) &transferData[4]; //after all the vetexes
+    indexData[0] = 0;
+    indexData[1] = 1;
+    indexData[2] = 2;
+    indexData[3] = 0;
+    indexData[4] = 2;
+    indexData[5] = 3;
+
+    
+
+    // Lacuna: We don't understand Mapping
+    SDL_UnmapGPUTransferBuffer(context->gpuDevice, transferBuffer);
+
+    SDL_GPUCommandBuffer* uploadCommandBuffer =
+      SDL_AcquireGPUCommandBuffer(context->gpuDevice);
+
+    SDL_GPUCopyPass* pass = SDL_BeginGPUCopyPass(uploadCommandBuffer);
+
+    SDL_GPUTransferBufferLocation source =
+      SDL_GPUTransferBufferLocation{.transfer_buffer = transferBuffer, .offset = 0 };
+    SDL_GPUBufferRegion destination =
+      SDL_GPUBufferRegion{
+      .offset = 0,
+      .size = sizeof(PositionColorVertex) * 4,
+      .buffer = vertexBuffer
+    }; 
+
+    // Why did we map if we were going to specify information about source and destination again?
+    SDL_UploadToGPUBuffer(pass, &source, &destination, false);
+
+    SDL_EndGPUCopyPass(pass);
+    SDL_SubmitGPUCommandBuffer(uploadCommandBuffer);
+    SDL_ReleaseGPUTransferBuffer(context->gpuDevice, transferBuffer);
+
+    return vertexBuffer;
+}

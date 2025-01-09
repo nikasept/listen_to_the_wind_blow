@@ -34,4 +34,10 @@ int DrawWithVertexBuffer(Context* context, SDL_GPUGraphicsPipeline* FillPipeline
 
 bool BeginDrawing(Context *context, SDL_FColor clearColor);
 bool PresentAndStopDrawing();
+
+SDL_GPUBuffer* CreateGPUTriangeVertexBuffer(Context* context,
+					    PositionColorVertex vertex[3]);
+
+SDL_GPUBuffer* CreateGPUQuadVertexBuffer(Context* context,
+					 PositionColorVertex vertex[4]);
 #endif

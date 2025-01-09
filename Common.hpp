@@ -16,4 +16,10 @@ public:
     Uint8 r, g, b, a;
 };
 
+class PositionUVVertex {
+public:
+    float x, y, z;
+    Uint8 u, v;
+};
+
 #endif
