@@ -1,4 +1,4 @@
-files := main.cpp Graphics.cpp
+files := main.cpp Graphics.cpp DrawablePrimitive.cpp
 
 all: 
 	glslc shaders/source/triangle.vert -o shaders/compiled/triangle.vert.spv

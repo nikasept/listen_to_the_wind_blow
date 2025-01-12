@@ -4,8 +4,9 @@
 #include <cstring>
 #include <iostream>
 
-#include "Graphics.hpp"
 #include "Common.hpp"
+#include "DrawablePrimitive.hpp"
+#include "Graphics.hpp"
 
 bool isDrawing = false;
 RenderPassInfo* renderPassInfo;
@@ -18,7 +19,7 @@ SDL_GPUShader* LoadShader(
 
     if(SDL_strstr(shaderName, ".vert")){
         shaderStage = SDL_GPU_SHADERSTAGE_VERTEX;
-    }else {
+    } else {
         shaderStage = SDL_GPU_SHADERSTAGE_FRAGMENT;
     }
 
@@ -68,8 +69,9 @@ SDL_GPUShader* LoadShader(
 
 // depricated, only use of one pipline did this.
 // one pipeline thus one shader.
-int DrawShader(Context *context, SDL_GPUGraphicsPipeline* FillPipeline){
-    SDL_GPUCommandBuffer* cmdBuffer = SDL_AcquireGPUCommandBuffer(context->gpuDevice);
+int DrawOnlyShader(Context *context, SDL_GPUGraphicsPipeline* FillPipeline) {
+    SDL_GPUCommandBuffer* cmdBuffer =
+      SDL_AcquireGPUCommandBuffer(context->gpuDevice);
 
     assert(cmdBuffer != NULL);
 
@@ -145,13 +147,11 @@ void testRenderPassInfo() {
     assert(renderPassInfo->cmdBuffer);
     assert(renderPassInfo->swapchainTexture);
     assert(renderPassInfo->renderPass);
+    assert(renderPassInfo->colorTargetInfo);
 }
 
 bool PresentAndStopDrawing() {
-    assert(renderPassInfo->cmdBuffer);
-    assert(renderPassInfo->swapchainTexture);
-    assert(renderPassInfo->renderPass);
-    assert(renderPassInfo->colorTargetInfo);
+  //testRenderPassInfo();
 
     // no need to free the swapchaintexture.
     SDL_EndGPURenderPass(renderPassInfo->renderPass);
@@ -164,7 +164,7 @@ bool PresentAndStopDrawing() {
 }
 
 int DrawWithVertexBuffer(Context *context,
-			 SDL_GPUGraphicsPipeline *FillPipeline,
+			 SDL_GPUGraphicsPipeline* FillPipeline,
 			 SDL_GPUBuffer* VertexBuffer){
 
     testRenderPassInfo();
@@ -185,6 +185,43 @@ int DrawWithVertexBuffer(Context *context,
 			     0, &bufferBinding, 1);
     SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
 
+    return 0;
+}
+
+bool DrawPrimitive(DrawablePrimitive* primitive) {
+
+    if(renderPassInfo->swapchainTexture == NULL) {
+        std::cout << "no swapchain texture" << std::endl;
+	return -1;
+    }
+    SDL_GPURenderPass* renderPass = renderPassInfo->renderPass;
+
+    SDL_BindGPUGraphicsPipeline(renderPass,
+				primitive->getPipeline()); 
+
+    SDL_GPUBufferBinding vertexBinding =
+      (SDL_GPUBufferBinding){ .buffer = primitive->getVertexBuffer(),
+			      .offset = 0 };
+
+    SDL_GPUBufferBinding indexBinding =
+      (SDL_GPUBufferBinding){ .buffer = primitive->getIndexBuffer(),
+			      .offset = 0 };
+
+    SDL_BindGPUVertexBuffers(renderPass,
+			     0, &vertexBinding, 1);
+
+    if (primitive->hasIndexBuffer()) {
+        SDL_BindGPUIndexBuffer(renderPass,
+			       &indexBinding,
+			       SDL_GPU_INDEXELEMENTSIZE_16BIT);
+	SDL_DrawGPUIndexedPrimitives(renderPass, 6, 1, 0, 0, 0);
+	
+    }
+    else {
+        // for regular triangles 
+        SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
+    }
+    
     return 0;
 }
 
@@ -249,11 +286,20 @@ SDL_GPUBuffer* CreateGPUTriangeVertexBuffer(Context* context,
     return vertexBuffer;
 }
 
-SDL_GPUBuffer* CreateGPUQuadVertexBuffer(Context* context,
-					    PositionColorVertex vertex[4]) {
+
+DrawablePrimitive* CreateGPUQuadPrimitive(Context* context,
+					  SDL_GPUGraphicsPipeline* pipeline,
+					  SDL_GPUTexture* texture,
+					  PositionColorVertex vertex[4]) {
+  //initialize buffers
     SDL_GPUBufferCreateInfo vertexBufferCreateInfo  = {
-        .size = sizeof(PositionColorVertex) * 4,
-        .usage = SDL_GPU_BUFFERUSAGE_VERTEX
+        .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
+	.size = sizeof(PositionColorVertex) * 4,
+    };
+
+    SDL_GPUBufferCreateInfo indexBufferCreateInfo  = {
+        .usage = SDL_GPU_BUFFERUSAGE_INDEX,
+	.size = sizeof(Uint16) * 6,
     };
     
     SDL_GPUBuffer* vertexBuffer;
@@ -263,9 +309,18 @@ SDL_GPUBuffer* CreateGPUQuadVertexBuffer(Context* context,
         &vertexBufferCreateInfo
     ); 
 
+    SDL_GPUBuffer* indexBuffer;
+
+    indexBuffer = SDL_CreateGPUBuffer(
+        context->gpuDevice,
+        &indexBufferCreateInfo
+    ); 
+
+    // get ready to transfer, (both)
+
     SDL_GPUTransferBufferCreateInfo transferBufferCreateInfo = {
         .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = sizeof(PositionColorVertex) * 4 + (sizeof(Uint16) * 6)
+        .size = (sizeof(PositionColorVertex) * 4) + (sizeof(Uint16) * 6)
     };
 
     SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(
@@ -283,15 +338,13 @@ SDL_GPUBuffer* CreateGPUQuadVertexBuffer(Context* context,
     transferData[3] = vertex[3];
 
     // tell em how to connect, idk how this work.
-    Uint16* indexData = (Uint16*) &transferData[4]; //after all the vetexes
+    Uint16* indexData = (Uint16*) &transferData[4];
     indexData[0] = 0;
     indexData[1] = 1;
     indexData[2] = 2;
     indexData[3] = 0;
     indexData[4] = 2;
     indexData[5] = 3;
-
-    
 
     // Lacuna: We don't understand Mapping
     SDL_UnmapGPUTransferBuffer(context->gpuDevice, transferBuffer);
@@ -301,21 +354,61 @@ SDL_GPUBuffer* CreateGPUQuadVertexBuffer(Context* context,
 
     SDL_GPUCopyPass* pass = SDL_BeginGPUCopyPass(uploadCommandBuffer);
 
-    SDL_GPUTransferBufferLocation source =
-      SDL_GPUTransferBufferLocation{.transfer_buffer = transferBuffer, .offset = 0 };
-    SDL_GPUBufferRegion destination =
+    // this is transfer bit.
+    // each one needs its own transfer buffer and uploade
+
+    // vertex
+    SDL_GPUTransferBufferLocation vertexSrc =
+      SDL_GPUTransferBufferLocation {.transfer_buffer = transferBuffer,
+				     .offset = 0 };
+    SDL_GPUBufferRegion vertexDst =
       SDL_GPUBufferRegion{
+      .buffer = vertexBuffer,
       .offset = 0,
       .size = sizeof(PositionColorVertex) * 4,
-      .buffer = vertexBuffer
     }; 
 
-    // Why did we map if we were going to specify information about source and destination again?
-    SDL_UploadToGPUBuffer(pass, &source, &destination, false);
+    // index
+    SDL_GPUTransferBufferLocation indexSrc =
+      SDL_GPUTransferBufferLocation {
+      .transfer_buffer = transferBuffer,
+      .offset = sizeof(PositionColorVertex) * 4
+    };
+
+    SDL_GPUBufferRegion indexDst =
+      SDL_GPUBufferRegion{
+      .buffer = indexBuffer,
+      .offset = 0,
+      .size = sizeof(Uint16) * 6,
+    }; 
+
+
+    // upload both.
+    SDL_UploadToGPUBuffer(pass, &vertexSrc, &vertexDst, false);
+    SDL_UploadToGPUBuffer(pass, &indexSrc, &indexDst, false);
 
     SDL_EndGPUCopyPass(pass);
     SDL_SubmitGPUCommandBuffer(uploadCommandBuffer);
     SDL_ReleaseGPUTransferBuffer(context->gpuDevice, transferBuffer);
 
-    return vertexBuffer;
+    DrawablePrimitive* primitive = new DrawablePrimitive(context,
+							 vertexBuffer,
+							 indexBuffer,
+							 pipeline,
+							 texture);
+    return primitive;
 }
+
+DrawablePrimitive* CreateGPUTrianglePrimitive(Context* context,
+					  SDL_GPUGraphicsPipeline* pipeline,
+					  SDL_GPUTexture* texture,
+					  PositionColorVertex vertex[3]) {
+  SDL_GPUBuffer* triangleVertex =
+    CreateGPUTriangeVertexBuffer(context, vertex);
+
+  DrawablePrimitive* primitive =
+    new DrawablePrimitive(context, triangleVertex, NULL, pipeline, texture);
+
+  return primitive;
+}
+ 

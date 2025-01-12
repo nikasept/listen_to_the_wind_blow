@@ -1,8 +1,8 @@
-#include <SDL3/SDL_gpu.h>
 
 #ifndef COMMON_HPP
 #define COMMON_HPP
 
+#include <SDL3/SDL_gpu.h>
 
 class Context {
 public:

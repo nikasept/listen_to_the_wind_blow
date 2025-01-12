@@ -12,7 +12,7 @@
 #include <cassert>
 #include <iostream>
 #include "Graphics.hpp"
-
+#include "DrawablePrimitive.hpp"
 
 /* USEFUL STRUCTS
 (1) SDL_GPUComputePipeline
@@ -66,7 +66,9 @@ Unforseen Tasks:
 
 static SDL_GPUGraphicsPipeline* FillPipeline;
 //static SDL_GPUBuffer* VertexBuffer;
-static std::vector<SDL_GPUBuffer*> GPUVertexBufferPointers;
+static std::vector<DrawablePrimitive*> DrawablePrimitives;
+static std::vector<SDL_GPUBuffer*> GraphicsPipelines;
+static std::vector<SDL_GPUBuffer*> Textures;
 
 static void init(Context* context) {
     
@@ -155,8 +157,9 @@ static void initWithVertexBuffer(Context* context){
 
 
 static void destroy(Context* context) {
-    for (SDL_GPUBuffer* buf : GPUVertexBufferPointers) {
-        SDL_ReleaseGPUBuffer(context->gpuDevice, buf);
+    for (DrawablePrimitive* primitive : DrawablePrimitives) {
+        
+      //SDL_ReleaseGPUBuffer(context->gpuDevice, buf);
     }
     SDL_ReleaseGPUGraphicsPipeline(context->gpuDevice, FillPipeline);
     SDL_ReleaseWindowFromGPUDevice(context->gpuDevice,  context->window);
@@ -177,9 +180,9 @@ int main() {
     initWithVertexBuffer(&context);
 
     // hard coded vertecies
-    PositionColorVertex vertset1[4] = {
+    PositionColorVertex rectVerts[4] = {
       {
-        -1,    -1,  0,
+        -1,    1,  0,
 	0,   0,   0, 255 
       },
       {
@@ -196,10 +199,28 @@ int main() {
       }
 	
     };
-   
-    SDL_GPUBuffer* buf1 = CreateGPUQuadVertexBuffer(&context, vertset1);
 
-    GPUVertexBufferPointers.push_back(buf1);
+    PositionColorVertex triangleVerts[3] = {
+      {
+	0, 1, 0,
+	255, 0, 0, 255
+      },
+      {
+	-1, -1, 0,
+	0, 255, 0, 255
+      },
+      {
+	1, -1, 0,
+	0, 0, 255, 255
+      }
+    };
+   
+    DrawablePrimitive* rect = CreateGPUQuadPrimitive(&context, FillPipeline,
+						     NULL,
+						     rectVerts);
+    DrawablePrimitive* tri =
+      CreateGPUTrianglePrimitive(&context, FillPipeline, NULL,
+				 triangleVerts);
 
     SDL_Event e;
     bool quit = false;
@@ -212,12 +233,11 @@ int main() {
         }
 
 	BeginDrawing(&context, {1.0f, 1.0f, 1.0f, 1.0f} );
-	for (SDL_GPUBuffer* buf : GPUVertexBufferPointers) {
-	    DrawWithVertexBuffer(&context, FillPipeline, buf);
-	}
+	DrawPrimitive(rect);
+	DrawPrimitive(tri);
 	PresentAndStopDrawing();
 
-	SDL_Delay(1000/60);
+	SDL_Delay(1000/144);
     }
 
 
