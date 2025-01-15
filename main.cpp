@@ -105,54 +105,16 @@ static void initWithVertexBuffer(Context* context){
 
     assert(deviceCreated);
 
-    SDL_GPUShader* vertexShader = LoadShader(context->gpuDevice, "triangle.vert.spv");
-    SDL_GPUShader* fragmentShader = LoadShader(context->gpuDevice, "triangle.frag.spv");
+    SDL_GPUShader* vertexShader =
+      LoadShader(context->gpuDevice, "textured.vert.spv");
 
-    SDL_GPUGraphicsPipelineCreateInfo info = {
-        .vertex_shader = vertexShader,
-        .fragment_shader = fragmentShader, 
-        .vertex_input_state = (SDL_GPUVertexInputState){
-            .vertex_buffer_descriptions = (SDL_GPUVertexBufferDescription[]){{
-                .slot = 0,
-                .pitch = sizeof(PositionColorVertex),
-                .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
-                .instance_step_rate = 0
-            }},
-            .num_vertex_buffers = 1,
-           
-            .vertex_attributes = (SDL_GPUVertexAttribute[]){
-                {
-                    .location = 0,
-                    .buffer_slot = 0,
-                    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-                    .offset = 0,
-                },
-                {
-                    .location = 1,
-                    .buffer_slot = 0,
-                    .format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,
-                    .offset = sizeof(float) * 3
-                }
-            },
+    SDL_GPUShader* fragmentShader =
+      LoadShader(context->gpuDevice, "textured.frag.spv");
 
-            .num_vertex_attributes = 2
-        },
-        .target_info = {
-            .color_target_descriptions = (SDL_GPUColorTargetDescription[]) {
-            { 
-                    .format = SDL_GetGPUSwapchainTextureFormat(context->gpuDevice, context->window)
-                }
-            },
-            .num_color_targets = 1,
-        },
-    };
+    FillPipeline =
+      CreateBasicFillPipeline(context, vertexShader, fragmentShader);
 
-    info.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-
-    FillPipeline = SDL_CreateGPUGraphicsPipeline(context->gpuDevice, &info); 
     assert(FillPipeline != NULL);
-
-
 }
 
 
@@ -182,16 +144,16 @@ int main() {
     // hard coded vertecies
     PositionColorVertex rectVerts[4] = {
       {
-        -1,    1,  0,
+        -1,  1,  0,
 	0,   0,   0, 255 
       },
       {
         1,    1,  0,
-	0,   255,   0, 255 
+	255,  0,   0, 255 
       },
       {
         1,    -1,  0,
-	255,  0,   0, 255 
+	0,   255,   0, 255 
       },
       {
 	-1,    -1,  0,
@@ -215,13 +177,58 @@ int main() {
       }
     };
    
-    DrawablePrimitive* rect = CreateGPUQuadPrimitive(&context, FillPipeline,
-						     NULL,
-						     rectVerts);
+    std::cout<<"loading bmp"<<std::endl;
+    SDL_Surface* agnee = SDL_LoadBMP("agnee.bmp");
+    if (agnee == NULL) {
+      std::cout<<"the bmp doesn't exist"<<std::endl;
+      return 0;
+    }
+
+    if (agnee->format != SDL_PIXELFORMAT_ABGR8888) {
+      std::cout<<"wrong pixel format"<<std::endl;
+      SDL_Surface* right_format =
+	SDL_ConvertSurface(agnee, SDL_PIXELFORMAT_ABGR8888);
+
+      SDL_DestroySurface(agnee);
+      agnee = right_format;
+    }
+
+    std::cout<<"uploading texture"<<std::endl;
+    SDL_GPUTexture* texture = CreateTexture(&context, agnee);
+    std::cout<<"uploaded texture"<<std::endl;
+    
+    
+    SDL_GPUSamplerCreateInfo sampler_info = {
+      .min_filter = SDL_GPU_FILTER_NEAREST,
+      .mag_filter = SDL_GPU_FILTER_NEAREST,
+      .mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST,
+      .address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+      .address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+      .address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+    };
+
+    SDL_GPUSamplerCreateInfo sampler_info2 ={
+      .min_filter = SDL_GPU_FILTER_NEAREST,
+      .mag_filter = SDL_GPU_FILTER_NEAREST,
+      .mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST,
+      .address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_REPEAT,
+      .address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_REPEAT,
+      .address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_REPEAT,
+    };
+
+    SDL_GPUSampler* sampler = SDL_CreateGPUSampler(context.gpuDevice,
+						   &sampler_info2);
+
+    
+    DrawablePrimitive* rect =
+      CreateGPUQuadPrimitive(&context, FillPipeline, texture, sampler,
+			     rectVerts);
     DrawablePrimitive* tri =
-      CreateGPUTrianglePrimitive(&context, FillPipeline, NULL,
+      CreateGPUTrianglePrimitive(&context, FillPipeline, texture, sampler,
 				 triangleVerts);
 
+
+    
     SDL_Event e;
     bool quit = false;
     while(!quit){
@@ -234,7 +241,7 @@ int main() {
 
 	BeginDrawing(&context, {1.0f, 1.0f, 1.0f, 1.0f} );
 	DrawPrimitive(rect);
-	DrawPrimitive(tri);
+	//DrawPrimitive(tri);
 	PresentAndStopDrawing();
 
 	SDL_Delay(1000/144);

@@ -38,16 +38,11 @@ bool DrawPrimitive(DrawablePrimitive* primitive);
 bool BeginDrawing(Context *context, SDL_FColor clearColor);
 bool PresentAndStopDrawing();
 
-SDL_GPUBuffer* CreateGPUTriangeVertexBuffer(Context* context,
-					    PositionColorVertex vertex[3]);
+SDL_GPUGraphicsPipeline* CreateBasicFillPipeline(Context* context,
+						 SDL_GPUShader* vertShader,
+						 SDL_GPUShader* fragShader);
 
-DrawablePrimitive* CreateGPUQuadPrimitive(Context* context,
-					  SDL_GPUGraphicsPipeline* pipeline,
-					  SDL_GPUTexture* texture,
-					  PositionColorVertex vertex[4]);
 
-DrawablePrimitive* CreateGPUTrianglePrimitive(Context* context,
-					  SDL_GPUGraphicsPipeline* pipeline,
-					  SDL_GPUTexture* texture,
-					  PositionColorVertex vertex[3]);
+SDL_GPUTexture* CreateTexture(Context* ctx, SDL_Surface* surface);
+
 #endif
