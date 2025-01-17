@@ -167,6 +167,8 @@ DrawablePrimitive* CreateGPUQuadPrimitive(Context* context,
         &vertexBufferCreateInfo
     ); 
 
+    SDL_SetGPUBufferName(context->gpuDevice, vertexBuffer, "quadBuffer");
+
     SDL_GPUBuffer* indexBuffer;
 
     indexBuffer = SDL_CreateGPUBuffer(
@@ -227,14 +229,12 @@ DrawablePrimitive* CreateGPUQuadPrimitive(Context* context,
     }; 
 
     // index
-    SDL_GPUTransferBufferLocation indexSrc =
-      SDL_GPUTransferBufferLocation {
+    SDL_GPUTransferBufferLocation indexSrc = {
       .transfer_buffer = transferBuffer,
       .offset = sizeof(PositionColorVertex) * 4
     };
 
-    SDL_GPUBufferRegion indexDst =
-      SDL_GPUBufferRegion{
+    SDL_GPUBufferRegion indexDst = {
       .buffer = indexBuffer,
       .offset = 0,
       .size = sizeof(Uint16) * 6,

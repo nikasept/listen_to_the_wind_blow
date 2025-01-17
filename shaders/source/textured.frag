@@ -2,8 +2,9 @@
 
 layout(location = 0) in vec2 inUV; // Interpolated color from vertex shader
 
-// uniform time
-layout(binding = 0) uniform sampler2D tex;
+// uniform time, why is it done like this? investigate
+layout(set = 2, binding = 0) uniform sampler2D tex;
+layout(set = 2, binding = 1) uniform sampler Sampler;
 
 layout(location = 0) out vec4 FragColor; // Final fragment color
 

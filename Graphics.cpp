@@ -17,10 +17,12 @@ SDL_GPUShader* LoadShader(
 ) {
     SDL_GPUShaderStage shaderStage;
 
+    bool isFrag = false;
     if(SDL_strstr(shaderName, ".vert")){
         shaderStage = SDL_GPU_SHADERSTAGE_VERTEX;
     } else {
         shaderStage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+	isFrag = true;
     }
 
 
@@ -43,20 +45,44 @@ SDL_GPUShader* LoadShader(
     size_t codeSize;
     void* code = SDL_LoadFile(fullPath, &codeSize); 
 
-    assert(code != NULL);   
+    assert(code != NULL);
 
-    SDL_GPUShaderCreateInfo info = {
-        .code_size = codeSize,
-        .code = (Uint8*)code,
-        .entrypoint = "main",
+    // TODO: use a shader reflecter
+    // this is too hard coded.
+    // vulkan SPRV-reflecter on github looks nice.
+
+    SDL_GPUShaderCreateInfo info;
+    std::cout<<"creating shader----"<<std::endl;
+    
+    if (isFrag) {
+      std::cout<<"frag"<<std::endl;
+      info = {
+	.code_size = codeSize,
+	.code = (Uint8*)code,
+	.entrypoint = "main",
+	.format = format,
+	.stage = shaderStage,
+	.num_samplers = 1,
+	.num_storage_textures = 0,
+	.num_storage_buffers = 0,
+	.num_uniform_buffers = 0
+	
+      };
+    }
+    else {
+      std::cout<<"vertex"<<std::endl;
+      info = {
+	.code_size = codeSize,
+	.code = (Uint8*)code,
+	.entrypoint = "main",
         .format = format,
         .stage = shaderStage,
         .num_samplers = 0,
         .num_storage_textures = 0,
         .num_storage_buffers = 0,
         .num_uniform_buffers = 0
-
-    };
+      };
+    }
 
     SDL_GPUShader* shader = SDL_CreateGPUShader(gpuDevice, &info);
 
@@ -201,6 +227,7 @@ bool DrawPrimitive(DrawablePrimitive* primitive) {
     SDL_BindGPUGraphicsPipeline(renderPass,
 				primitive->getPipeline()); 
 
+    
     SDL_GPUBufferBinding vertexBinding =
       (SDL_GPUBufferBinding){ .buffer = primitive->getVertexBuffer(),
 			      .offset = 0 };
@@ -211,24 +238,21 @@ bool DrawPrimitive(DrawablePrimitive* primitive) {
 
     SDL_BindGPUVertexBuffers(renderPass,
 			     0, &vertexBinding, 1);
-
-    if (primitive->hasTexture()) {
-      std::cout<<"has texture"<<std::endl;
-  
-    }
-    
+   
     if (primitive->hasIndexBuffer()) {
         SDL_BindGPUIndexBuffer(renderPass,
 			       &indexBinding,
 			       SDL_GPU_INDEXELEMENTSIZE_16BIT);
 	
-	SDL_GPUTextureSamplerBinding samplerTextureBind = {
-	  .texture = primitive->getTexture(),
-	  .sampler = primitive->getSampler()
-	};
-	
-	SDL_BindGPUFragmentSamplers(renderPass, 0, &samplerTextureBind, 1);
-	
+    if (primitive->hasTexture()) {
+      SDL_GPUTextureSamplerBinding samplerTextureBind = {
+	.texture = primitive->getTexture(),
+	.sampler = primitive->getSampler()
+      };
+
+      SDL_BindGPUFragmentSamplers(renderPass, 0, &samplerTextureBind, 1);
+    }
+ 
 	SDL_DrawGPUIndexedPrimitives(renderPass, 6, 1, 0, 0, 0);
     }
     else {
@@ -322,10 +346,12 @@ SDL_GPUTexture* CreateTexture(Context* ctx, SDL_Surface* surface) {
     Uint8* textureTransferPtr =
       (Uint8*)SDL_MapGPUTransferBuffer(ctx->gpuDevice,
 				       textureTransferBuffer, false);
-
+			 
     std::cout<<"bouta mem copy!!!!"<<std::endl;
-    SDL_memcpy(textureTransferPtr, surface->pixels,
-	       surface->w * surface->h * 4);
+    //SDL_memcpy(textureTransferPtr, surface->pixels,
+    //	       surface->w * surface->h * 4);
+    std::memcpy(textureTransferPtr, surface->pixels,
+		surface->w * surface->h * 4);
 
     std::cout<<"memcopy done"<<std::endl;
     SDL_UnmapGPUTransferBuffer(ctx->gpuDevice, textureTransferBuffer);

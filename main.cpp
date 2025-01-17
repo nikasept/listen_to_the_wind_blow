@@ -142,6 +142,8 @@ int main() {
     initWithVertexBuffer(&context);
 
     // hard coded vertecies
+    // uv +y goes down, +x goes left
+    // important to know that
     PositionColorVertex rectVerts[4] = {
       {
         -1,  1,  0,
@@ -153,11 +155,11 @@ int main() {
       },
       {
         1,    -1,  0,
-	0,   255,   0, 255 
+	255,   255,   0, 255 
       },
       {
 	-1,    -1,  0,
-	255,   255, 0, 255
+	0,   255, 0, 255
       }
 	
     };
@@ -196,6 +198,8 @@ int main() {
     std::cout<<"uploading texture"<<std::endl;
     SDL_GPUTexture* texture = CreateTexture(&context, agnee);
     std::cout<<"uploaded texture"<<std::endl;
+
+    SDL_DestroySurface(agnee);
     
     
     SDL_GPUSamplerCreateInfo sampler_info = {
@@ -217,14 +221,14 @@ int main() {
     };
 
     SDL_GPUSampler* sampler = SDL_CreateGPUSampler(context.gpuDevice,
-						   &sampler_info2);
+						   &sampler_info);
 
     
     DrawablePrimitive* rect =
       CreateGPUQuadPrimitive(&context, FillPipeline, texture, sampler,
 			     rectVerts);
     DrawablePrimitive* tri =
-      CreateGPUTrianglePrimitive(&context, FillPipeline, texture, sampler,
+      CreateGPUTrianglePrimitive(&context, FillPipeline, NULL, NULL,
 				 triangleVerts);
 
 
