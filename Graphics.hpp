@@ -45,4 +45,6 @@ SDL_GPUGraphicsPipeline* CreateBasicFillPipeline(Context* context,
 
 SDL_GPUTexture* CreateTexture(Context* ctx, SDL_Surface* surface);
 
+void SetMissingTexture(SDL_GPUTexture* tex, SDL_GPUSampler* sampl);
+
 #endif

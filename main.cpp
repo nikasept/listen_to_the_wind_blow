@@ -110,6 +110,7 @@ static void initWithVertexBuffer(Context* context){
 
     SDL_GPUShader* fragmentShader =
       LoadShader(context->gpuDevice, "textured.frag.spv");
+    
 
     FillPipeline =
       CreateBasicFillPipeline(context, vertexShader, fragmentShader);
@@ -129,6 +130,24 @@ static void destroy(Context* context) {
     SDL_DestroyGPUDevice(context->gpuDevice);
 }
 
+SDL_Surface* loadBMP(const char* filename) {
+   
+  SDL_Surface* surface = SDL_LoadBMP(filename);
+    if (surface == NULL) {
+      return 0;
+      std::cout<<"IMAGE DOESN'T EXIST" <<std::endl;
+    }
+
+    if (surface->format != SDL_PIXELFORMAT_ABGR8888) {
+      SDL_Surface* right_format =
+	SDL_ConvertSurface(surface, SDL_PIXELFORMAT_ABGR8888);
+
+      SDL_DestroySurface(surface);
+      surface = right_format;
+    }
+   
+    return surface;
+}
 
 int main() {
     SDL_Init(SDL_INIT_VIDEO);
@@ -178,30 +197,16 @@ int main() {
 	0, 0, 255, 255
       }
     };
-   
-    std::cout<<"loading bmp"<<std::endl;
-    SDL_Surface* agnee = SDL_LoadBMP("agnee.bmp");
-    if (agnee == NULL) {
-      std::cout<<"the bmp doesn't exist"<<std::endl;
-      return 0;
-    }
 
-    if (agnee->format != SDL_PIXELFORMAT_ABGR8888) {
-      std::cout<<"wrong pixel format"<<std::endl;
-      SDL_Surface* right_format =
-	SDL_ConvertSurface(agnee, SDL_PIXELFORMAT_ABGR8888);
-
-      SDL_DestroySurface(agnee);
-      agnee = right_format;
-    }
-
-    std::cout<<"uploading texture"<<std::endl;
+    SDL_Surface* agnee = loadBMP("agnee.bmp");
+    SDL_Surface* missingTextureFile = loadBMP("missing_texture.bmp");
+ 
     SDL_GPUTexture* texture = CreateTexture(&context, agnee);
-    std::cout<<"uploaded texture"<<std::endl;
+    SDL_GPUTexture* missingTexture = CreateTexture(&context,
+						   missingTextureFile);
 
     SDL_DestroySurface(agnee);
-    
-    
+   
     SDL_GPUSamplerCreateInfo sampler_info = {
       .min_filter = SDL_GPU_FILTER_NEAREST,
       .mag_filter = SDL_GPU_FILTER_NEAREST,
@@ -224,14 +229,15 @@ int main() {
 						   &sampler_info);
 
     
+    SetMissingTexture(missingTexture, sampler);
+
     DrawablePrimitive* rect =
-      CreateGPUQuadPrimitive(&context, FillPipeline, texture, sampler,
-			     rectVerts);
+      CreateGPUQuadPrimitive(&context, FillPipeline, rectVerts);
     DrawablePrimitive* tri =
-      CreateGPUTrianglePrimitive(&context, FillPipeline, NULL, NULL,
-				 triangleVerts);
+      CreateGPUTrianglePrimitive(&context, FillPipeline, triangleVerts);
 
-
+    //tri->addTexture(texture, sampler);
+    rect->addTexture(texture, sampler);
     
     SDL_Event e;
     bool quit = false;
@@ -245,7 +251,7 @@ int main() {
 
 	BeginDrawing(&context, {1.0f, 1.0f, 1.0f, 1.0f} );
 	DrawPrimitive(rect);
-	//DrawPrimitive(tri);
+	DrawPrimitive(tri);
 	PresentAndStopDrawing();
 
 	SDL_Delay(1000/144);

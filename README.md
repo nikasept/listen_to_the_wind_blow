@@ -1,3 +1,13 @@
+
+# Requirements
+sdl3, vulkan stuff, make, glslc, clang++, Big Brainz
+
+## im saul goodman (legal stuff)
+this app uses spirv-reflect, which was made by other people
+the files of spirv-reflect have not been modified.
+I Plead The Fifth.
+https://github.com/KhronosGroup/SPIRV-Reflect
+
 Paroles
 Listen to the wind blow, watch the sun rise
 Running in the shadows, damn your love, damn your lies

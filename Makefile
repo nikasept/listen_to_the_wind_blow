@@ -1,4 +1,5 @@
-files := main.cpp Graphics.cpp DrawablePrimitive.cpp
+files := main.cpp Graphics.cpp DrawablePrimitive.cpp \
+spirv_reflect/spirv_reflect.cpp
 
 all: 
 	glslc shaders/source/basic.vert -o shaders/compiled/basic.vert.spv

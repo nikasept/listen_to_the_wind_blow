@@ -4,12 +4,15 @@
 #include <cstring>
 #include <iostream>
 
+#include "spirv_reflect/spirv_reflect.h"
 #include "Common.hpp"
 #include "DrawablePrimitive.hpp"
 #include "Graphics.hpp"
 
 bool isDrawing = false;
 RenderPassInfo* renderPassInfo;
+
+SDL_GPUTextureSamplerBinding MissingTextureBind;
 
 SDL_GPUShader* LoadShader(
     SDL_GPUDevice* gpuDevice,
@@ -47,41 +50,56 @@ SDL_GPUShader* LoadShader(
 
     assert(code != NULL);
 
-    // TODO: use a shader reflecter
-    // this is too hard coded.
-    // vulkan SPRV-reflecter on github looks nice.
+    std::cout<<"creating shader---- \n"<<std::endl;
 
     SDL_GPUShaderCreateInfo info;
-    std::cout<<"creating shader----"<<std::endl;
-    
-    if (isFrag) {
-      std::cout<<"frag"<<std::endl;
-      info = {
-	.code_size = codeSize,
-	.code = (Uint8*)code,
-	.entrypoint = "main",
-	.format = format,
-	.stage = shaderStage,
-	.num_samplers = 1,
-	.num_storage_textures = 0,
-	.num_storage_buffers = 0,
-	.num_uniform_buffers = 0
-	
-      };
+    info = {
+      .code_size = codeSize,
+      .code = (Uint8*)code,
+      .entrypoint = "main",
+      .format = format,
+      .stage = shaderStage,
+      .num_samplers = 0,
+      .num_storage_textures = 0,
+      .num_storage_buffers = 0,
+      .num_uniform_buffers = 0
+    };
+ 
+    SpvReflectShaderModule mod;
+    SpvReflectResult result =
+      spvReflectCreateShaderModule(codeSize, code, &mod);
+    assert(result == SPV_REFLECT_RESULT_SUCCESS);
+
+    std::cout<<"input var count: "<< mod.input_variable_count<<std::endl;
+    std::cout<<"uniform: "
+	     <<mod.entry_points->used_uniform_count
+	     << std::endl;
+
+    std::cout<<"descriptor set count: "
+	     <<mod.entry_points->descriptor_set_count
+	     << std::endl;
+
+
+    for (int i=0; i < mod.entry_points->input_variable_count; i++ ){
+      std::cout<<"varnames: "<< mod.entry_points->input_variables[i]->name
+	       <<std::endl;
     }
-    else {
-      std::cout<<"vertex"<<std::endl;
-      info = {
-	.code_size = codeSize,
-	.code = (Uint8*)code,
-	.entrypoint = "main",
-        .format = format,
-        .stage = shaderStage,
-        .num_samplers = 0,
-        .num_storage_textures = 0,
-        .num_storage_buffers = 0,
-        .num_uniform_buffers = 0
-      };
+
+    // keep an eye out for this, there are descriptor_set_counts and
+    // bindin_count i dont know the relation.
+    if (mod.entry_points->descriptor_set_count > 0) {
+      for (int i=0; i < mod.entry_points->descriptor_sets->binding_count;
+	   i++ ) {
+	std::cout<<"(D)varname: "
+		 << mod.entry_points->descriptor_sets->bindings[i]->name
+     		 <<std::endl;
+     	std::cout <<"D type: " << mod.entry_points->descriptor_sets->bindings[i]->descriptor_type << std::endl;
+     	if (mod.entry_points->descriptor_sets->bindings[i]->
+     	    descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
+     	  std::cout <<"is sampler!"<<std::endl;
+     	  info.num_samplers+=1;
+     	}
+      }
     }
 
     SDL_GPUShader* shader = SDL_CreateGPUShader(gpuDevice, &info);
@@ -227,6 +245,8 @@ bool DrawPrimitive(DrawablePrimitive* primitive) {
     SDL_BindGPUGraphicsPipeline(renderPass,
 				primitive->getPipeline()); 
 
+    SDL_BindGPUFragmentSamplers(renderPass, 0,
+				  &MissingTextureBind, 1);
     
     SDL_GPUBufferBinding vertexBinding =
       (SDL_GPUBufferBinding){ .buffer = primitive->getVertexBuffer(),
@@ -238,22 +258,22 @@ bool DrawPrimitive(DrawablePrimitive* primitive) {
 
     SDL_BindGPUVertexBuffers(renderPass,
 			     0, &vertexBinding, 1);
-   
-    if (primitive->hasIndexBuffer()) {
-        SDL_BindGPUIndexBuffer(renderPass,
-			       &indexBinding,
-			       SDL_GPU_INDEXELEMENTSIZE_16BIT);
-	
-    if (primitive->hasTexture()) {
-      SDL_GPUTextureSamplerBinding samplerTextureBind = {
-	.texture = primitive->getTexture(),
-	.sampler = primitive->getSampler()
-      };
 
-      SDL_BindGPUFragmentSamplers(renderPass, 0, &samplerTextureBind, 1);
+    if (primitive->hasTexture()) {
+      
+      std::vector<SDL_GPUTextureSamplerBinding> textureBinds =
+	*primitive->getTextureBinds();
+
+      SDL_BindGPUFragmentSamplers(renderPass, 0,
+				  textureBinds.data(), textureBinds.size());
     }
  
-	SDL_DrawGPUIndexedPrimitives(renderPass, 6, 1, 0, 0, 0);
+ 
+    if (primitive->hasIndexBuffer()) {
+      SDL_BindGPUIndexBuffer(renderPass,
+			     &indexBinding,
+			     SDL_GPU_INDEXELEMENTSIZE_16BIT);
+      SDL_DrawGPUIndexedPrimitives(renderPass, 6, 1, 0, 0, 0);
     }
     else {
         // for regular triangles 
@@ -347,13 +367,11 @@ SDL_GPUTexture* CreateTexture(Context* ctx, SDL_Surface* surface) {
       (Uint8*)SDL_MapGPUTransferBuffer(ctx->gpuDevice,
 				       textureTransferBuffer, false);
 			 
-    std::cout<<"bouta mem copy!!!!"<<std::endl;
     //SDL_memcpy(textureTransferPtr, surface->pixels,
     //	       surface->w * surface->h * 4);
     std::memcpy(textureTransferPtr, surface->pixels,
 		surface->w * surface->h * 4);
 
-    std::cout<<"memcopy done"<<std::endl;
     SDL_UnmapGPUTransferBuffer(ctx->gpuDevice, textureTransferBuffer);
 
     SDL_GPUCommandBuffer* uploadCmdBuf =
@@ -381,4 +399,12 @@ SDL_GPUTexture* CreateTexture(Context* ctx, SDL_Surface* surface) {
     SDL_ReleaseGPUTransferBuffer(ctx->gpuDevice, textureTransferBuffer);
 
     return texture;
+}
+
+
+void SetMissingTexture(SDL_GPUTexture* tex, SDL_GPUSampler* sampl) {
+  MissingTextureBind = {
+    .texture = tex,
+    .sampler = sampl
+  };
 }
